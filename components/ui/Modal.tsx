@@ -23,6 +23,8 @@ export function Modal({
   footer,
   maxWidth = 'md',
 }: ModalProps) {
+  const titleId = React.useId();
+
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -54,6 +56,7 @@ export function Modal({
     <div
       role="dialog"
       aria-modal="true"
+      aria-labelledby={titleId}
       className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
     >
       {/* Backdrop */}
@@ -71,7 +74,7 @@ export function Modal({
       >
         <div className="flex items-start justify-between pb-3 border-b border-zinc-100 dark:border-zinc-800">
           <div>
-            <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+            <h3 id={titleId} className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
               {title}
             </h3>
             {description && (

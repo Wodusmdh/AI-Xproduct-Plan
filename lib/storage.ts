@@ -1,12 +1,12 @@
 'use client';
 
-import { Project, CreateProjectInput, UpdateProjectInput } from '@/types/project';
+import { Project, ProjectStatus, CreateProjectInput, UpdateProjectInput } from '@/types/project';
 
 const STORAGE_KEY = 'ai_product_planner_projects_v1';
 const EVENT_NAME = 'ai_product_planner_projects_updated';
 
-// Default starter templates so new users can explore immediately
-const INITIAL_SAMPLE_PROJECTS: Project[] = [
+// Default starter templates so users can explore when explicitly requested
+export const INITIAL_SAMPLE_PROJECTS: Project[] = [
   {
     id: 'sample-1',
     name: 'DevSync AI',
@@ -32,13 +32,59 @@ const INITIAL_SAMPLE_PROJECTS: Project[] = [
 ];
 
 function isBrowser(): boolean {
-  return typeof window !== 'undefined';
+  return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
 }
 
 function notifySubscribers() {
   if (isBrowser()) {
-    window.dispatchEvent(new Event(EVENT_NAME));
+    try {
+      window.dispatchEvent(new Event(EVENT_NAME));
+    } catch (err) {
+      console.error('Failed to notify storage subscribers:', err);
+    }
   }
+}
+
+const VALID_STATUSES: ProjectStatus[] = ['draft', 'in_planning', 'ready_for_dev', 'archived'];
+
+function sanitizeProject(item: unknown): Project | null {
+  if (!item || typeof item !== 'object') return null;
+  const raw = item as Record<string, unknown>;
+
+  if (
+    typeof raw.id !== 'string' ||
+    typeof raw.name !== 'string' ||
+    typeof raw.description !== 'string' ||
+    typeof raw.idea !== 'string'
+  ) {
+    return null;
+  }
+
+  const status: ProjectStatus =
+    typeof raw.status === 'string' && VALID_STATUSES.includes(raw.status as ProjectStatus)
+      ? (raw.status as ProjectStatus)
+      : 'draft';
+
+  const tags = Array.isArray(raw.tags)
+    ? raw.tags.filter((t): t is string => typeof t === 'string')
+    : [];
+
+  const createdAt =
+    typeof raw.createdAt === 'string' ? raw.createdAt : new Date().toISOString();
+  const updatedAt =
+    typeof raw.updatedAt === 'string' ? raw.updatedAt : createdAt;
+
+  return {
+    id: raw.id,
+    name: raw.name,
+    description: raw.description,
+    idea: raw.idea,
+    targetUsers: typeof raw.targetUsers === 'string' ? raw.targetUsers : undefined,
+    tags,
+    status,
+    createdAt,
+    updatedAt,
+  };
 }
 
 /**
@@ -52,15 +98,21 @@ export const projectStorage = {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) {
-        // Initialize with default sample projects
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_SAMPLE_PROJECTS));
-        return INITIAL_SAMPLE_PROJECTS;
+        // Starts empty for a brand-new user; no automatic sample injection
+        return [];
       }
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        return parsed;
+      if (!Array.isArray(parsed)) {
+        return [];
       }
-      return [];
+      const validProjects: Project[] = [];
+      for (const item of parsed) {
+        const sanitized = sanitizeProject(item);
+        if (sanitized) {
+          validProjects.push(sanitized);
+        }
+      }
+      return validProjects;
     } catch (err) {
       console.error('Failed to read projects from storage:', err);
       return [];
@@ -75,13 +127,18 @@ export const projectStorage = {
   async create(input: CreateProjectInput): Promise<Project> {
     const list = await this.getAll();
     const now = new Date().toISOString();
+    const uniqueId =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? `proj_${crypto.randomUUID()}`
+        : `proj_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 9)}`;
+
     const newProject: Project = {
-      id: 'proj_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now().toString(36),
+      id: uniqueId,
       name: input.name.trim(),
       description: input.description.trim(),
       idea: input.idea.trim(),
       targetUsers: input.targetUsers?.trim() || undefined,
-      tags: input.tags || [],
+      tags: input.tags ? input.tags.map((t) => t.trim()).filter(Boolean) : [],
       status: input.status || 'draft',
       createdAt: now,
       updatedAt: now,
@@ -89,8 +146,12 @@ export const projectStorage = {
 
     const updated = [newProject, ...list];
     if (isBrowser()) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-      notifySubscribers();
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+        notifySubscribers();
+      } catch (err) {
+        console.error('Failed to save new project to storage:', err);
+      }
     }
     return newProject;
   },
@@ -103,14 +164,23 @@ export const projectStorage = {
     const existing = list[index];
     const updatedProject: Project = {
       ...existing,
-      ...input,
+      name: input.name !== undefined ? input.name.trim() : existing.name,
+      description: input.description !== undefined ? input.description.trim() : existing.description,
+      idea: input.idea !== undefined ? input.idea.trim() : existing.idea,
+      targetUsers: input.targetUsers !== undefined ? input.targetUsers.trim() || undefined : existing.targetUsers,
+      tags: input.tags !== undefined ? input.tags.map((t) => t.trim()).filter(Boolean) : existing.tags,
+      status: input.status !== undefined ? input.status : existing.status,
       updatedAt: new Date().toISOString(),
     };
 
     list[index] = updatedProject;
     if (isBrowser()) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-      notifySubscribers();
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+        notifySubscribers();
+      } catch (err) {
+        console.error('Failed to update project in storage:', err);
+      }
     }
     return updatedProject;
   },
@@ -121,24 +191,69 @@ export const projectStorage = {
     if (filtered.length === list.length) return false;
 
     if (isBrowser()) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
-      notifySubscribers();
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+        notifySubscribers();
+      } catch (err) {
+        console.error('Failed to delete project from storage:', err);
+      }
     }
     return true;
   },
 
   async clearAll(): Promise<void> {
     if (isBrowser()) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
-      notifySubscribers();
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
+        notifySubscribers();
+      } catch (err) {
+        console.error('Failed to clear storage:', err);
+      }
     }
   },
 
-  async resetToSamples(): Promise<void> {
-    if (isBrowser()) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_SAMPLE_PROJECTS));
-      notifySubscribers();
+  /**
+   * Loads sample starter projects without creating duplicate entries.
+   * If sample projects already exist, they are not re-added.
+   */
+  async loadSampleProjects(): Promise<Project[]> {
+    const list = await this.getAll();
+    const existingIds = new Set(list.map((p) => p.id));
+    const existingNames = new Set(list.map((p) => p.name.toLowerCase()));
+
+    const toAdd = INITIAL_SAMPLE_PROJECTS.filter(
+      (sample) => !existingIds.has(sample.id) && !existingNames.has(sample.name.toLowerCase())
+    );
+
+    if (toAdd.length === 0) {
+      return list;
     }
+
+    const updated = [...list, ...toAdd];
+    if (isBrowser()) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+        notifySubscribers();
+      } catch (err) {
+        console.error('Failed to load sample projects into storage:', err);
+      }
+    }
+    return updated;
+  },
+
+  /**
+   * Resets workspace strictly to the default sample projects.
+   */
+  async resetToSamples(): Promise<Project[]> {
+    if (isBrowser()) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_SAMPLE_PROJECTS));
+        notifySubscribers();
+      } catch (err) {
+        console.error('Failed to reset samples in storage:', err);
+      }
+    }
+    return INITIAL_SAMPLE_PROJECTS;
   },
 
   subscribe(callback: () => void): () => void {

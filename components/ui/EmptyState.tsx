@@ -8,8 +8,11 @@ export interface EmptyStateProps {
   description: string;
   actionLabel?: string;
   onAction?: () => void;
+  secondaryActionLabel?: string;
+  onSecondaryAction?: () => void;
   icon?: React.ReactNode;
   className?: string;
+  children?: React.ReactNode;
 }
 
 export function EmptyState({
@@ -17,13 +20,16 @@ export function EmptyState({
   description,
   actionLabel,
   onAction,
+  secondaryActionLabel,
+  onSecondaryAction,
   icon,
   className,
+  children,
 }: EmptyStateProps) {
   return (
     <div
       className={cn(
-        'flex flex-col items-center justify-center rounded-xl border border-dashed border-zinc-200 bg-zinc-50/50 p-10 text-center dark:border-zinc-800 dark:bg-zinc-900/30',
+        'flex flex-col items-center justify-center rounded-xl border border-dashed border-zinc-200 bg-zinc-50/50 p-8 sm:p-10 text-center dark:border-zinc-800 dark:bg-zinc-900/30',
         className
       )}
     >
@@ -34,11 +40,21 @@ export function EmptyState({
       <p className="max-w-md text-sm text-zinc-500 dark:text-zinc-400 mb-6 leading-relaxed">
         {description}
       </p>
-      {actionLabel && onAction && (
-        <Button onClick={onAction} size="md">
-          {actionLabel}
-        </Button>
+      {(actionLabel || secondaryActionLabel) && (
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          {actionLabel && onAction && (
+            <Button onClick={onAction} size="md">
+              {actionLabel}
+            </Button>
+          )}
+          {secondaryActionLabel && onSecondaryAction && (
+            <Button onClick={onSecondaryAction} variant="outline" size="md">
+              {secondaryActionLabel}
+            </Button>
+          )}
+        </div>
       )}
+      {children}
     </div>
   );
 }

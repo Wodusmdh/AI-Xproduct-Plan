@@ -54,14 +54,22 @@ export default function CreateProjectPage() {
   };
 
   const handleAddCustomTag = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && customTag.trim()) {
+    if (e.key === 'Enter') {
       e.preventDefault();
       const cleaned = customTag.trim();
-      if (!selectedTags.includes(cleaned)) {
+      if (cleaned && !selectedTags.includes(cleaned)) {
         setSelectedTags([...selectedTags, cleaned]);
       }
       setCustomTag('');
     }
+  };
+
+  const handleAddTagClick = () => {
+    const cleaned = customTag.trim();
+    if (cleaned && !selectedTags.includes(cleaned)) {
+      setSelectedTags([...selectedTags, cleaned]);
+    }
+    setCustomTag('');
   };
 
   const validate = () => {
@@ -82,7 +90,7 @@ export default function CreateProjectPage() {
     if (!idea.trim()) {
       newErrors.idea = 'Please outline the core problem and idea';
     } else if (idea.trim().length < 25) {
-      newErrors.idea = 'Explain the core idea with enough detail for AI planning (min 25 chars)';
+      newErrors.idea = 'Explain the core idea with enough detail for planning (min 25 chars)';
     }
 
     setErrors(newErrors);
@@ -91,6 +99,7 @@ export default function CreateProjectPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
     if (!validate()) return;
 
     setIsSubmitting(true);
@@ -226,6 +235,82 @@ export default function CreateProjectPage() {
                         </button>
                       );
                     })}
+                  </div>
+
+                  {/* Custom tag input */}
+                  <div className="flex items-center gap-2 pt-2">
+                    <input
+                      type="text"
+                      value={customTag}
+                      onChange={(e) => setCustomTag(e.target.value)}
+                      onKeyDown={handleAddCustomTag}
+                      placeholder="Add custom tag (e.g. Fintech, CLI)..."
+                      className="h-8 rounded-md border border-zinc-200 bg-white px-2.5 text-xs text-zinc-900 placeholder:text-zinc-400 focus-visible:border-zinc-900 focus-visible:outline-none dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100 w-full sm:max-w-xs"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs shrink-0"
+                      disabled={!customTag.trim()}
+                      onClick={handleAddTagClick}
+                    >
+                      Add Tag
+                    </Button>
+                  </div>
+                  {selectedTags.length > 0 && (
+                    <div className="flex flex-wrap gap-1 pt-1.5">
+                      <span className="text-[11px] text-zinc-400 self-center mr-1">Active tags:</span>
+                      {selectedTags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="inline-flex items-center gap-1 text-[11px] bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded text-zinc-700 dark:text-zinc-300"
+                        >
+                          {tag}
+                          <button
+                            type="button"
+                            onClick={() => toggleTag(tag)}
+                            className="hover:text-rose-600 ml-0.5"
+                            aria-label={`Remove tag ${tag}`}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Status selection */}
+                <div className="space-y-1.5 pt-1">
+                  <label className="block text-xs font-medium uppercase tracking-wider text-zinc-600 dark:text-zinc-400">
+                    Initial Status
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 sm:max-w-md">
+                    <button
+                      type="button"
+                      onClick={() => setStatus('in_planning')}
+                      className={`p-2.5 rounded-lg border text-left text-xs transition-colors ${
+                        status === 'in_planning'
+                          ? 'border-zinc-900 bg-zinc-900/5 dark:border-zinc-100 dark:bg-zinc-100/5 font-medium'
+                          : 'border-zinc-200 bg-white hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900'
+                      }`}
+                    >
+                      <span className="font-semibold text-zinc-900 dark:text-zinc-100 block">In Planning</span>
+                      <span className="text-[11px] text-zinc-500">Actively drafting roadmap and specs</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStatus('draft')}
+                      className={`p-2.5 rounded-lg border text-left text-xs transition-colors ${
+                        status === 'draft'
+                          ? 'border-zinc-900 bg-zinc-900/5 dark:border-zinc-100 dark:bg-zinc-100/5 font-medium'
+                          : 'border-zinc-200 bg-white hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900'
+                      }`}
+                    >
+                      <span className="font-semibold text-zinc-900 dark:text-zinc-100 block">Draft</span>
+                      <span className="text-[11px] text-zinc-500">Unpolished concept or exploratory note</span>
+                    </button>
                   </div>
                 </div>
               </div>

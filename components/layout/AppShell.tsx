@@ -18,7 +18,6 @@ import {
   X,
   Compass,
   ChevronRight,
-  Sparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { FutureFeatureModal } from '@/components/projects/FutureFeatureModal';

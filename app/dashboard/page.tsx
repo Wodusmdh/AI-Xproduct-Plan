@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout/AppShell';
 import { ProjectCard } from '@/components/projects/ProjectCard';
 import { EmptyState } from '@/components/ui/EmptyState';
@@ -14,13 +15,11 @@ import {
   PlusCircle,
   Search,
   RotateCcw,
-  Sparkles,
-  Layers,
   FolderOpen,
-  Filter,
 } from 'lucide-react';
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [projects, setProjects] = React.useState<Project[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [searchQuery, setSearchQuery] = React.useState('');
@@ -63,23 +62,34 @@ export default function DashboardPage() {
 
   const handleDeleteConfirm = async () => {
     if (!projectToDelete) return;
-    await projectStorage.delete(projectToDelete.id);
+    const targetId = projectToDelete.id;
     setProjectToDelete(null);
-    loadProjects();
+    // Instant UI update
+    setProjects((prev) => prev.filter((p) => p.id !== targetId));
+    await projectStorage.delete(targetId);
   };
 
-  const handleResetSamples = async () => {
-    await projectStorage.resetToSamples();
-    loadProjects();
+  const handleLoadSamples = async () => {
+    setIsLoading(true);
+    try {
+      const updated = await projectStorage.loadSampleProjects();
+      setProjects(updated);
+    } catch (err) {
+      console.error('Failed to load sample projects:', err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Filter projects by search query and status
   const filteredProjects = React.useMemo(() => {
     return projects.filter((project) => {
+      const query = searchQuery.toLowerCase().trim();
       const matchesSearch =
-        project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        project.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (project.tags && project.tags.some((t) => t.toLowerCase().includes(searchQuery.toLowerCase())));
+        !query ||
+        project.name.toLowerCase().includes(query) ||
+        project.description.toLowerCase().includes(query) ||
+        (project.tags && project.tags.some((t) => t.toLowerCase().includes(query)));
 
       const matchesStatus = statusFilter === 'all' || project.status === statusFilter;
 
@@ -116,7 +126,7 @@ export default function DashboardPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handleResetSamples}
+                onClick={handleLoadSamples}
                 leftIcon={<RotateCcw className="size-3.5" />}
               >
                 Load Sample Projects
@@ -184,6 +194,7 @@ export default function DashboardPage() {
                 { id: 'in_planning', label: 'In Planning' },
                 { id: 'ready_for_dev', label: 'Ready' },
                 { id: 'draft', label: 'Drafts' },
+                { id: 'archived', label: 'Archived' },
               ] as const
             ).map((filter) => (
               <button
@@ -226,7 +237,9 @@ export default function DashboardPage() {
             title="No projects created yet"
             description="Start by creating your first product concept. We'll help you structure it into a comprehensive development roadmap."
             actionLabel="Create First Project"
-            onAction={() => window.location.assign('/projects/new')}
+            onAction={() => router.push('/projects/new')}
+            secondaryActionLabel="Load Sample Projects"
+            onSecondaryAction={handleLoadSamples}
             icon={<FolderOpen className="size-6" />}
           />
         ) : (

@@ -23,14 +23,7 @@ import {
   Check,
   Download,
   AlertCircle,
-  FileText,
-  Boxes,
-  Code2,
-  ListTodo,
-  Terminal,
-  CheckCircle2,
   Clock,
-  ArrowRight,
 } from 'lucide-react';
 
 export default function ProjectDetailPage() {
@@ -50,6 +43,7 @@ export default function ProjectDetailPage() {
   const [editIdea, setEditIdea] = React.useState('');
   const [editTargetUsers, setEditTargetUsers] = React.useState('');
   const [editStatus, setEditStatus] = React.useState<ProjectStatus>('draft');
+  const [editErrors, setEditErrors] = React.useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = React.useState(false);
 
   // Delete Modal State
@@ -113,20 +107,49 @@ export default function ProjectDetailPage() {
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!project) return;
+    if (!project || isSaving) return;
+
+    const errs: Record<string, string> = {};
+    if (!editName.trim()) {
+      errs.name = 'Project name is required';
+    } else if (editName.trim().length < 3) {
+      errs.name = 'Project name must be at least 3 characters';
+    }
+
+    if (!editDesc.trim()) {
+      errs.desc = 'Short description is required';
+    } else if (editDesc.trim().length < 10) {
+      errs.desc = 'Description must be at least 10 characters';
+    }
+
+    if (!editIdea.trim()) {
+      errs.idea = 'Core problem and solution is required';
+    } else if (editIdea.trim().length < 25) {
+      errs.idea = 'Concept must be at least 25 characters';
+    }
+
+    if (Object.keys(errs).length > 0) {
+      setEditErrors(errs);
+      return;
+    }
+
+    setEditErrors({});
     setIsSaving(true);
     try {
-      await projectStorage.update(project.id, {
-        name: editName,
-        description: editDesc,
-        idea: editIdea,
-        targetUsers: editTargetUsers,
+      const updated = await projectStorage.update(project.id, {
+        name: editName.trim(),
+        description: editDesc.trim(),
+        idea: editIdea.trim(),
+        targetUsers: editTargetUsers.trim() || undefined,
         status: editStatus,
       });
+      if (updated) {
+        setProject(updated);
+      }
       setIsEditOpen(false);
-      loadProject();
     } catch (err) {
       console.error('Failed to update project:', err);
+      setEditErrors({ form: 'Failed to update project. Please try again.' });
     } finally {
       setIsSaving(false);
     }
@@ -437,10 +460,17 @@ ${project.idea}
         }
       >
         <form onSubmit={handleUpdate} className="space-y-4">
+          {editErrors.form && (
+            <div className="rounded-md bg-rose-50 p-2.5 text-xs text-rose-600 dark:bg-rose-950/40 dark:text-rose-400">
+              {editErrors.form}
+            </div>
+          )}
+
           <Input
             label="Project Name"
             value={editName}
             onChange={(e) => setEditName(e.target.value)}
+            error={editErrors.name}
             required
           />
 
@@ -448,6 +478,7 @@ ${project.idea}
             label="Tagline / Short Summary"
             value={editDesc}
             onChange={(e) => setEditDesc(e.target.value)}
+            error={editErrors.desc}
             required
           />
 
@@ -456,6 +487,7 @@ ${project.idea}
             rows={5}
             value={editIdea}
             onChange={(e) => setEditIdea(e.target.value)}
+            error={editErrors.idea}
             required
           />
 
@@ -463,6 +495,7 @@ ${project.idea}
             label="Target Users"
             value={editTargetUsers}
             onChange={(e) => setEditTargetUsers(e.target.value)}
+            placeholder="e.g. Solo developers, early-stage founders"
           />
 
           <div className="space-y-1.5">
