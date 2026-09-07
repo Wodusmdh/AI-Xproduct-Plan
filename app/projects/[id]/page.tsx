@@ -11,8 +11,9 @@ import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import { Textarea } from '@/components/ui/Textarea';
 import { FutureFeatureModal } from '@/components/projects/FutureFeatureModal';
+import { ProjectAnalysisPanel } from '@/components/projects/ProjectAnalysisPanel';
 import { projectStorage } from '@/lib/storage';
-import { Project, ProjectStatus, PLANNER_STAGES, PlannerStage } from '@/types/project';
+import { Project, ProjectStatus, ProjectAnalysis, PLANNER_STAGES, PlannerStage } from '@/types/project';
 import {
   ArrowLeft,
   Calendar,
@@ -176,7 +177,7 @@ export default function ProjectDetailPage() {
 
   const handleCopySpec = () => {
     if (!project) return;
-    const formatted = `# ${project.name}
+    let formatted = `# ${project.name}
 **Tagline:** ${project.description}
 **Status:** ${project.status}
 **Target Users:** ${project.targetUsers || 'Not specified'}
@@ -184,9 +185,34 @@ export default function ProjectDetailPage() {
 ## Core Problem & Concept
 ${project.idea}
 `;
+    if (project.analysis) {
+      formatted += `
+## AI Project Analysis (Generated ${new Date(project.analysis.generatedAt).toLocaleDateString()})
+**Value Proposition:** ${project.analysis.valueProposition}
+**Feasibility:** Tech: ${project.analysis.feasibility.technical.level.toUpperCase()} | Product: ${project.analysis.feasibility.product.level.toUpperCase()} | Complexity: ${project.analysis.feasibility.complexity.level.toUpperCase()}
+
+### In-Scope (MVP)
+${project.analysis.scope.inScope.map((s) => `- ${s}`).join('\n')}
+
+### Top Risks
+${project.analysis.risks.map((r) => `- [${r.severity.toUpperCase()}] ${r.title}: ${r.mitigation}`).join('\n')}
+`;
+    }
     navigator.clipboard.writeText(formatted);
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2000);
+  };
+
+  const handleAnalysisUpdated = async (newAnalysis: ProjectAnalysis) => {
+    if (!project) return;
+    try {
+      const updated = await projectStorage.saveAnalysis(project.id, newAnalysis);
+      if (updated) {
+        setProject(updated);
+      }
+    } catch (err) {
+      console.error('Failed to save updated analysis:', err);
+    }
   };
 
   if (isLoading) {
@@ -314,7 +340,7 @@ ${project.idea}
             <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
               Specification & Planning Pipeline
             </h2>
-            <span className="text-xs text-zinc-400">Phase 1 Active • Stage 1 of 7 Available</span>
+            <span className="text-xs text-zinc-400">Phase 2 Active • Stage 1 & 2 Available</span>
           </div>
 
           {/* Horizontal stage strip */}
@@ -344,10 +370,16 @@ ${project.idea}
                     <span className={isActive ? 'font-bold text-zinc-900 dark:text-zinc-100' : ''}>
                       0{stage.number}
                     </span>
-                    {stage.isImplemented ? (
+                    {stage.id === 'analysis' ? (
+                      project.analysis ? (
+                        <span className="size-1.5 rounded-full bg-emerald-500" title="Analysis Completed" />
+                      ) : (
+                        <span className="size-1.5 rounded-full bg-purple-500" title="Ready to Analyze" />
+                      )
+                    ) : stage.isImplemented ? (
                       <span className="size-1.5 rounded-full bg-emerald-500" />
                     ) : (
-                      <span className="text-[9px] text-zinc-400 uppercase">P2</span>
+                      <span className="text-[9px] text-zinc-400 uppercase">P3</span>
                     )}
                   </div>
 
@@ -363,77 +395,83 @@ ${project.idea}
         </div>
 
         {/* Active Stage Content Area */}
-        <Card className="p-6">
-          <div className="space-y-6">
-            <div className="flex items-center justify-between pb-4 border-b border-zinc-100 dark:border-zinc-800">
-              <div>
-                <span className="text-xs font-mono font-medium text-emerald-600 dark:text-emerald-400 uppercase">
-                  Stage 01 • Active In Phase 1
-                </span>
-                <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 mt-0.5">
-                  Project Overview & Problem Statement
-                </h3>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsEditOpen(true)}
-                leftIcon={<Edit3 className="size-3.5" />}
-              >
-                Edit Details
-              </Button>
-            </div>
-
-            {/* Problem & Solution Breakdown */}
-            <div className="space-y-4">
-              <div>
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">
-                  Core Problem & Solution Concept
-                </h4>
-                <div className="rounded-lg border border-zinc-100 bg-zinc-50/70 p-4 text-xs sm:text-sm text-zinc-700 dark:border-zinc-800/60 dark:bg-zinc-900/40 dark:text-zinc-300 whitespace-pre-wrap leading-relaxed">
-                  {project.idea}
+        {activeStageId === 'analysis' ? (
+          <ProjectAnalysisPanel project={project} onAnalysisUpdated={handleAnalysisUpdated} />
+        ) : (
+          <Card className="p-6">
+            <div className="space-y-6">
+              <div className="flex items-center justify-between pb-4 border-b border-zinc-100 dark:border-zinc-800">
+                <div>
+                  <span className="text-xs font-mono font-medium text-emerald-600 dark:text-emerald-400 uppercase">
+                    Stage 01 • Active In Phase 1 & 2
+                  </span>
+                  <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 mt-0.5">
+                    Project Overview & Problem Statement
+                  </h3>
                 </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsEditOpen(true)}
+                  leftIcon={<Edit3 className="size-3.5" />}
+                >
+                  Edit Details
+                </Button>
               </div>
 
-              {project.targetUsers && (
+              {/* Problem & Solution Breakdown */}
+              <div className="space-y-4">
                 <div>
                   <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">
-                    Target Users / Audience
+                    Core Problem & Solution Concept
                   </h4>
-                  <div className="rounded-lg border border-zinc-100 bg-zinc-50/70 p-3 text-xs sm:text-sm text-zinc-700 dark:border-zinc-800/60 dark:bg-zinc-900/40 dark:text-zinc-300">
-                    {project.targetUsers}
+                  <div className="rounded-lg border border-zinc-100 bg-zinc-50/70 p-4 text-xs sm:text-sm text-zinc-700 dark:border-zinc-800/60 dark:bg-zinc-900/40 dark:text-zinc-300 whitespace-pre-wrap leading-relaxed">
+                    {project.idea}
                   </div>
                 </div>
-              )}
-            </div>
 
-            {/* Next Stage Teaser */}
-            <div className="rounded-xl border border-purple-200/80 bg-purple-50/60 p-5 dark:border-purple-900/60 dark:bg-purple-950/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 text-purple-900 dark:text-purple-300 font-semibold text-xs sm:text-sm">
-                  <Sparkles className="size-4" />
-                  <span>Next Milestone: Stage 02 (PRD Generation Engine)</span>
-                </div>
-                <p className="text-xs text-purple-800/80 dark:text-purple-300/80 leading-relaxed max-w-xl">
-                  In Phase 2, this project definition will feed directly into the Gemini-powered PRD generator to build full functional specs, user stories, and acceptance tests.
-                </p>
+                {project.targetUsers && (
+                  <div>
+                    <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">
+                      Target Users / Audience
+                    </h4>
+                    <div className="rounded-lg border border-zinc-100 bg-zinc-50/70 p-3 text-xs sm:text-sm text-zinc-700 dark:border-zinc-800/60 dark:bg-zinc-900/40 dark:text-zinc-300">
+                      {project.targetUsers}
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <Button
-                size="sm"
-                variant="outline"
-                className="border-purple-300 text-purple-900 hover:bg-purple-100 dark:border-purple-800 dark:text-purple-200 dark:hover:bg-purple-900/50 shrink-0"
-                onClick={() =>
-                  setActiveFutureStage(
-                    PLANNER_STAGES.find((s) => s.id === 'prd') || null
-                  )
-                }
-              >
-                Preview Stage 2 Scope
-              </Button>
+              {/* Stage 02 CTA Card */}
+              <div className="rounded-xl border border-purple-200/80 bg-purple-50/60 p-5 dark:border-purple-900/60 dark:bg-purple-950/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 text-purple-900 dark:text-purple-300 font-semibold text-xs sm:text-sm">
+                    <Sparkles className="size-4" />
+                    <span>
+                      {project.analysis
+                        ? 'Stage 02 (AI Project Analysis) Completed'
+                        : 'Next: Stage 02 (AI Project Analysis)'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-purple-800/80 dark:text-purple-300/80 leading-relaxed max-w-xl">
+                    {project.analysis
+                      ? 'Structured problem breakdown, feasibility matrix, risks, scope, and candidate features are ready.'
+                      : 'Deconstruct this project idea into structured problem framing, feasibility scores, risk mitigations, and prioritized feature scope with Gemini 3.8.'}
+                  </p>
+                </div>
+
+                <Button
+                  size="sm"
+                  className="bg-purple-600 hover:bg-purple-700 text-white shrink-0"
+                  onClick={() => setActiveStageId('analysis')}
+                  leftIcon={<Sparkles className="size-3.5" />}
+                >
+                  {project.analysis ? 'View AI Analysis' : 'Run Stage 02 Analysis'}
+                </Button>
+              </div>
             </div>
-          </div>
-        </Card>
+          </Card>
+        )}
       </div>
 
       {/* Edit Project Modal */}

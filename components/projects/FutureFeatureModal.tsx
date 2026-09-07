@@ -30,7 +30,7 @@ export function FutureFeatureModal({
       isOpen={isOpen}
       onClose={onClose}
       title={featureName}
-      description="Scheduled for Phase 2 Implementation"
+      description="Scheduled for Upcoming Implementation (Phase 3+)"
       maxWidth="md"
       footer={
         <Button variant="secondary" size="sm" onClick={onClose}>
@@ -42,11 +42,11 @@ export function FutureFeatureModal({
         <div className="rounded-lg border border-purple-200 bg-purple-50/70 p-3.5 dark:border-purple-900/60 dark:bg-purple-950/20">
           <div className="flex items-center gap-2 text-purple-800 dark:text-purple-300 font-medium">
             <Sparkles className="size-4" />
-            <span>Under Active Development</span>
+            <span>Planned Architectural Module</span>
           </div>
           <p className="mt-1 text-xs text-purple-700/90 dark:text-purple-300/80 leading-relaxed">
             {description ||
-              `The ${featureName} engine is scheduled for Phase 2. As per architectural guidelines, we do not provide mock or fake AI generation—real AI intelligence pipelines will be connected in the next phase.`}
+              `The ${featureName} engine is scheduled for future implementation. As per architectural guidelines, we do not provide mock or fake AI generation—real AI intelligence pipelines will be connected.`}
           </p>
         </div>
 

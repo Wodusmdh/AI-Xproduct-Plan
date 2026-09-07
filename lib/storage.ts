@@ -1,6 +1,7 @@
 'use client';
 
-import { Project, ProjectStatus, CreateProjectInput, UpdateProjectInput } from '@/types/project';
+import { Project, ProjectStatus, ProjectAnalysis, CreateProjectInput, UpdateProjectInput } from '@/types/project';
+import { validateProjectAnalysis } from '@/lib/analysis-validator';
 
 const STORAGE_KEY = 'ai_product_planner_projects_v1';
 const EVENT_NAME = 'ai_product_planner_projects_updated';
@@ -74,6 +75,14 @@ function sanitizeProject(item: unknown): Project | null {
   const updatedAt =
     typeof raw.updatedAt === 'string' ? raw.updatedAt : createdAt;
 
+  let analysis: ProjectAnalysis | undefined = undefined;
+  if (raw.analysis) {
+    const valResult = validateProjectAnalysis(raw.analysis);
+    if (valResult.success) {
+      analysis = valResult.data;
+    }
+  }
+
   return {
     id: raw.id,
     name: raw.name,
@@ -82,6 +91,7 @@ function sanitizeProject(item: unknown): Project | null {
     targetUsers: typeof raw.targetUsers === 'string' ? raw.targetUsers : undefined,
     tags,
     status,
+    analysis,
     createdAt,
     updatedAt,
   };
@@ -162,6 +172,15 @@ export const projectStorage = {
     if (index === -1) return null;
 
     const existing = list[index];
+
+    let newAnalysis = existing.analysis;
+    if (input.analysis !== undefined) {
+      const val = validateProjectAnalysis(input.analysis);
+      if (val.success) {
+        newAnalysis = val.data;
+      }
+    }
+
     const updatedProject: Project = {
       ...existing,
       name: input.name !== undefined ? input.name.trim() : existing.name,
@@ -170,6 +189,7 @@ export const projectStorage = {
       targetUsers: input.targetUsers !== undefined ? input.targetUsers.trim() || undefined : existing.targetUsers,
       tags: input.tags !== undefined ? input.tags.map((t) => t.trim()).filter(Boolean) : existing.tags,
       status: input.status !== undefined ? input.status : existing.status,
+      analysis: newAnalysis,
       updatedAt: new Date().toISOString(),
     };
 
@@ -180,6 +200,36 @@ export const projectStorage = {
         notifySubscribers();
       } catch (err) {
         console.error('Failed to update project in storage:', err);
+      }
+    }
+    return updatedProject;
+  },
+
+  async saveAnalysis(id: string, analysis: ProjectAnalysis): Promise<Project | null> {
+    const valResult = validateProjectAnalysis(analysis);
+    if (!valResult.success) {
+      console.error('Invalid analysis data rejected by storage:', valResult.error);
+      return null;
+    }
+
+    const list = await this.getAll();
+    const index = list.findIndex((p) => p.id === id);
+    if (index === -1) return null;
+
+    const existing = list[index];
+    const updatedProject: Project = {
+      ...existing,
+      analysis: valResult.data,
+      updatedAt: new Date().toISOString(),
+    };
+
+    list[index] = updatedProject;
+    if (isBrowser()) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+        notifySubscribers();
+      } catch (err) {
+        console.error('Failed to save project analysis to storage:', err);
       }
     }
     return updatedProject;
