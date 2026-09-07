@@ -242,7 +242,159 @@ export function validateProjectPRD(raw: unknown): PRDValidationResult {
     sanitizedRisks.push({ title, description, mitigation });
   }
 
-  // 11. generatedAt
+  // 11. traceability (optional, but strictly validated if present)
+  let sanitizedTraceability: ProjectPRD['traceability'] = undefined;
+  if (obj.traceability !== undefined && obj.traceability !== null) {
+    if (typeof obj.traceability !== 'object') {
+      return { success: false, error: 'Traceability payload must be an object' };
+    }
+    const traceObj = obj.traceability as Record<string, unknown>;
+    if (!Array.isArray(traceObj.links)) {
+      return { success: false, error: 'Traceability "links" must be an array' };
+    }
+
+    const validStoryIds = new Set(sanitizedUserStories.map((s) => s.id));
+    const validFRIds = new Set(sanitizedFunctionalRequirements.map((f) => f.id));
+    const sanitizedLinks: NonNullable<ProjectPRD['traceability']>['links'] = [];
+    const seenStoryIds = new Set<string>();
+
+    for (let i = 0; i < traceObj.links.length; i++) {
+      const linkItem = traceObj.links[i];
+      if (!linkItem || typeof linkItem !== 'object') {
+        return { success: false, error: `Traceability link at index ${i} must be an object` };
+      }
+      const link = linkItem as Record<string, unknown>;
+      const userStoryId = cleanString(link.userStoryId);
+
+      if (!userStoryId) {
+        return { success: false, error: `Traceability link at index ${i} is missing "userStoryId"` };
+      }
+
+      if (!validStoryIds.has(userStoryId)) {
+        return {
+          success: false,
+          error: `Traceability link at index ${i} references non-existent user story ID "${userStoryId}"`,
+        };
+      }
+
+      if (seenStoryIds.has(userStoryId)) {
+        // Skip duplicate userStoryId entries to keep links clean and canonical
+        continue;
+      }
+      seenStoryIds.add(userStoryId);
+
+      // Validate functionalRequirementIds
+      if (!Array.isArray(link.functionalRequirementIds)) {
+        return {
+          success: false,
+          error: `Traceability link for story "${userStoryId}" must have a "functionalRequirementIds" array`,
+        };
+      }
+      const frIds: string[] = [];
+      for (const rawFRId of link.functionalRequirementIds) {
+        const frId = cleanString(rawFRId);
+        if (!frId) continue;
+        if (!validFRIds.has(frId)) {
+          return {
+            success: false,
+            error: `Traceability link for story "${userStoryId}" references non-existent functional requirement ID "${frId}"`,
+          };
+        }
+        if (!frIds.includes(frId)) {
+          frIds.push(frId);
+        }
+      }
+
+      // Validate goalIndexes
+      if (!Array.isArray(link.goalIndexes)) {
+        return {
+          success: false,
+          error: `Traceability link for story "${userStoryId}" must have a "goalIndexes" array`,
+        };
+      }
+      const goalIdxs: number[] = [];
+      for (const rawGIdx of link.goalIndexes) {
+        if (typeof rawGIdx !== 'number' || !Number.isInteger(rawGIdx) || rawGIdx < 0 || rawGIdx >= goals.length) {
+          return {
+            success: false,
+            error: `Traceability link for story "${userStoryId}" references invalid goal index "${String(rawGIdx)}". Must be between 0 and ${goals.length - 1}`,
+          };
+        }
+        if (!goalIdxs.includes(rawGIdx)) {
+          goalIdxs.push(rawGIdx);
+        }
+      }
+      goalIdxs.sort((a, b) => a - b);
+
+      // Validate successMetricIndexes
+      if (!Array.isArray(link.successMetricIndexes)) {
+        return {
+          success: false,
+          error: `Traceability link for story "${userStoryId}" must have a "successMetricIndexes" array`,
+        };
+      }
+      const metricIdxs: number[] = [];
+      for (const rawMIdx of link.successMetricIndexes) {
+        if (
+          typeof rawMIdx !== 'number' ||
+          !Number.isInteger(rawMIdx) ||
+          rawMIdx < 0 ||
+          rawMIdx >= sanitizedSuccessMetrics.length
+        ) {
+          return {
+            success: false,
+            error: `Traceability link for story "${userStoryId}" references invalid success metric index "${String(rawMIdx)}". Must be between 0 and ${sanitizedSuccessMetrics.length - 1}`,
+          };
+        }
+        if (!metricIdxs.includes(rawMIdx)) {
+          metricIdxs.push(rawMIdx);
+        }
+      }
+      metricIdxs.sort((a, b) => a - b);
+
+      // Optional userNeedIndexes
+      let needIdxs: number[] | undefined = undefined;
+      if (Array.isArray(link.userNeedIndexes)) {
+        needIdxs = [];
+        for (const rawNIdx of link.userNeedIndexes) {
+          if (
+            typeof rawNIdx === 'number' &&
+            Number.isInteger(rawNIdx) &&
+            rawNIdx >= 0 &&
+            rawNIdx < userNeeds.length
+          ) {
+            if (!needIdxs.includes(rawNIdx)) {
+              needIdxs.push(rawNIdx);
+            }
+          }
+        }
+        needIdxs.sort((a, b) => a - b);
+      }
+
+      sanitizedLinks.push({
+        userStoryId,
+        functionalRequirementIds: frIds,
+        goalIndexes: goalIdxs,
+        successMetricIndexes: metricIdxs,
+        ...(needIdxs && needIdxs.length > 0 ? { userNeedIndexes: needIdxs } : {}),
+      });
+    }
+
+    sanitizedTraceability = {
+      links: sanitizedLinks,
+    };
+  }
+
+  // 12. sourceAnalysisGeneratedAt (optional for backwards compatibility / legacy PRDs)
+  let sourceAnalysisGeneratedAt: string | undefined = undefined;
+  if (typeof obj.sourceAnalysisGeneratedAt === 'string') {
+    const trimmed = obj.sourceAnalysisGeneratedAt.trim();
+    if (trimmed && !isNaN(Date.parse(trimmed))) {
+      sourceAnalysisGeneratedAt = trimmed;
+    }
+  }
+
+  // 13. generatedAt
   let generatedAt = cleanString(obj.generatedAt);
   if (!generatedAt || isNaN(Date.parse(generatedAt))) {
     generatedAt = new Date().toISOString();
@@ -271,6 +423,8 @@ export function validateProjectPRD(raw: unknown): PRDValidationResult {
       assumptions,
       successMetrics: sanitizedSuccessMetrics,
       risks: sanitizedRisks,
+      ...(sanitizedTraceability ? { traceability: sanitizedTraceability } : {}),
+      ...(sourceAnalysisGeneratedAt ? { sourceAnalysisGeneratedAt } : {}),
       generatedAt,
     },
   };

@@ -14,7 +14,7 @@ import { FutureFeatureModal } from '@/components/projects/FutureFeatureModal';
 import { ProjectAnalysisPanel } from '@/components/projects/ProjectAnalysisPanel';
 import { ProjectPRDPanel } from '@/components/projects/ProjectPRDPanel';
 import { projectStorage } from '@/lib/storage';
-import { Project, ProjectStatus, ProjectAnalysis, ProjectPRD, PLANNER_STAGES, PlannerStage } from '@/types/project';
+import { Project, ProjectStatus, ProjectAnalysis, ProjectPRD, PLANNER_STAGES, PlannerStage, getPRDSyncStatus } from '@/types/project';
 import {
   ArrowLeft,
   ArrowRight,
@@ -402,7 +402,11 @@ ${project.prd.functionalRequirements.map((fr) => `- [${fr.priority.toUpperCase()
                       )
                     ) : stage.id === 'prd' ? (
                       project.prd ? (
-                        <span className="size-1.5 rounded-full bg-emerald-500" title="PRD Generated" />
+                        getPRDSyncStatus(project.prd, project.analysis) === 'STALE' ? (
+                          <span className="size-1.5 rounded-full bg-amber-500 animate-pulse" title="PRD Outdated (Analysis Changed)" />
+                        ) : (
+                          <span className="size-1.5 rounded-full bg-emerald-500" title="PRD Synchronized" />
+                        )
                       ) : project.analysis ? (
                         <span className="size-1.5 rounded-full bg-purple-500" title="Ready to Generate PRD" />
                       ) : (

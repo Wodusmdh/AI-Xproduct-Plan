@@ -434,6 +434,42 @@ const prdResponseSchema = {
       },
       description: 'Product, adoption, and operational risks with mitigations',
     },
+    traceability: {
+      type: Type.OBJECT,
+      properties: {
+        links: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              userStoryId: {
+                type: Type.STRING,
+                description: 'Exact ID of a user story defined in userStories (e.g. US-1)',
+              },
+              functionalRequirementIds: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+                description: 'Array of exact IDs of functional requirements defined in functionalRequirements that directly implement this user story (e.g. ["FR-1", "FR-2"]). Do not include requirements without a direct functional link.',
+              },
+              goalIndexes: {
+                type: Type.ARRAY,
+                items: { type: Type.INTEGER },
+                description: '0-based integer indexes of items in the goals array that this user story supports (e.g. [0]). Leave empty if no direct goal relationship is established.',
+              },
+              successMetricIndexes: {
+                type: Type.ARRAY,
+                items: { type: Type.INTEGER },
+                description: '0-based integer indexes of items in the successMetrics array that directly evaluate the outcome of this user story (e.g. [0]). Leave empty if no direct metric relationship is established.',
+              },
+            },
+            required: ['userStoryId', 'functionalRequirementIds', 'goalIndexes', 'successMetricIndexes'],
+          },
+          description: 'Traceability mappings connecting each user story to its supporting functional requirements, supported goals, and success metrics.',
+        },
+      },
+      required: ['links'],
+      description: 'Explicit item-level traceability mapping without fabricated relationships.',
+    },
     generatedAt: {
       type: Type.STRING,
       description: 'ISO-8601 UTC timestamp',
@@ -452,6 +488,7 @@ const prdResponseSchema = {
     'assumptions',
     'successMetrics',
     'risks',
+    'traceability',
     'generatedAt',
   ],
 };
@@ -500,8 +537,19 @@ CRITICAL DIRECTIVES:
 9. Do NOT generate development tasks or sprint tickets (belongs to Phase 6).
 10. Do NOT generate AI coding prompts (belongs to Phase 7).
 11. Do NOT invent features unrelated to the Phase 2 analysis.
-12. Keep the entire PRD internally consistent and coherent.
-13. Return ONLY valid JSON adhering strictly to the response schema.`;
+12. TRACEABILITY DIRECTIVES (REAL ITEM-LEVEL LINKS WITHOUT FABRICATION):
+    - User Story is the central traceability anchor.
+    - Provide a link object in 'traceability.links' for every generated user story (using exact userStoryId matching an id in userStories).
+    - 'functionalRequirementIds': Include ONLY exact IDs from functionalRequirements that directly and logically support or implement that user story.
+    - 'goalIndexes': Include ONLY valid 0-based integer indexes of items in 'goals' that this story directly advances. If no direct goal relationship is established, leave the array empty [].
+    - 'successMetricIndexes': Include ONLY valid 0-based integer indexes of items in 'successMetrics' that directly evaluate the outcome of this story. If no direct metric relationship is established, leave the array empty [].
+    - NEVER create or reference IDs that do not exist in the PRD.
+    - NEVER invent fake functional requirements solely to create a complete-looking graph.
+    - NEVER assign relationships based merely on array position (e.g. mapping story 0 to requirement 0, or story 1 to requirement 1).
+    - Never link every requirement to every story. Each relationship must be genuine and specific.
+    - If a relationship cannot be established confidently, leave the relevant array empty [].
+13. Keep the entire PRD internally consistent and coherent.
+14. Return ONLY valid JSON adhering strictly to the response schema.`;
 
   const tagsList =
     input.project.tags && input.project.tags.length > 0

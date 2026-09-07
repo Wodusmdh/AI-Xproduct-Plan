@@ -99,7 +99,11 @@ export async function POST(request: NextRequest) {
     // 3. Generate PRD with Gemini 3.8 Flash
     const prd = await generatePRDWithGemini(input);
 
-    // 4. Verify validation of result
+    // 4. Stale Data Protection: The server derives and enforces sourceAnalysisGeneratedAt
+    // directly from the verified analysis used as input, preventing client spoofing.
+    prd.sourceAnalysisGeneratedAt = analysisValidation.data.generatedAt;
+
+    // 5. Verify validation of result
     const prdValidation = validateProjectPRD(prd);
     if (!prdValidation.success) {
       console.error('Generated PRD failed post-validation:', prdValidation.error);

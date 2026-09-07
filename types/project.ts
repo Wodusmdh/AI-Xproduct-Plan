@@ -60,6 +60,28 @@ export interface ProjectAnalysis {
   generatedAt: string;
 }
 
+export interface PRDTraceabilityLink {
+  userStoryId: string;
+  functionalRequirementIds: string[];
+  goalIndexes: number[];
+  successMetricIndexes: number[];
+  userNeedIndexes?: number[];
+}
+
+export interface PRDTraceability {
+  links: PRDTraceabilityLink[];
+}
+
+export type PRDSyncStatus = 'CURRENT' | 'STALE' | 'LEGACY' | 'NO_ANALYSIS';
+
+export function getPRDSyncStatus(prd?: ProjectPRD, analysis?: ProjectAnalysis): PRDSyncStatus {
+  if (!prd) return 'NO_ANALYSIS';
+  if (!analysis) return 'NO_ANALYSIS';
+  if (!prd.sourceAnalysisGeneratedAt) return 'LEGACY';
+  if (prd.sourceAnalysisGeneratedAt === analysis.generatedAt) return 'CURRENT';
+  return 'STALE';
+}
+
 export interface ProjectPRD {
   overview: {
     productName: string;
@@ -115,6 +137,14 @@ export interface ProjectPRD {
     description: string;
     mitigation: string;
   }[];
+
+  traceability?: PRDTraceability;
+
+  /**
+   * Exact ISO timestamp of the source ProjectAnalysis from which this PRD was generated.
+   * If missing, PRD is treated as LEGACY / UNKNOWN.
+   */
+  sourceAnalysisGeneratedAt?: string;
 
   generatedAt: string;
 }

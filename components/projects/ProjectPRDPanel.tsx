@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Project, ProjectPRD } from '@/types/project';
+import { Project, ProjectPRD, getPRDSyncStatus } from '@/types/project';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import {
@@ -13,6 +13,7 @@ import {
   MinusCircle,
   AlertTriangle,
   ArrowRight,
+  ArrowDown,
   Users,
   Target,
   FileText,
@@ -25,6 +26,7 @@ import {
   HelpCircle,
   ChevronRight,
   Flame,
+  Link2,
 } from 'lucide-react';
 
 export interface ProjectPRDPanelProps {
@@ -41,9 +43,45 @@ export function ProjectPRDPanel({
   const [isGenerating, setIsGenerating] = React.useState(false);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const [isCopied, setIsCopied] = React.useState(false);
+  const [selectedStoryId, setSelectedStoryId] = React.useState<string | null>(null);
 
   const prd = project.prd;
   const analysis = project.analysis;
+  const syncStatus = getPRDSyncStatus(prd, analysis);
+
+  // Sync selected story if current selection is invalid
+  const activeStory = React.useMemo(() => {
+    if (!prd || prd.userStories.length === 0) return null;
+    const found = prd.userStories.find((s) => s.id === selectedStoryId);
+    return found || prd.userStories[0];
+  }, [prd, selectedStoryId]);
+
+  // Derive item-level traceability for the active user story
+  const activeTraceLink = React.useMemo(() => {
+    if (!prd?.traceability?.links || !activeStory) return null;
+    return prd.traceability.links.find((l) => l.userStoryId === activeStory.id) || null;
+  }, [prd, activeStory]);
+
+  const linkedFRs = React.useMemo(() => {
+    if (!activeTraceLink || !prd) return [];
+    return prd.functionalRequirements.filter((fr) =>
+      activeTraceLink.functionalRequirementIds.includes(fr.id)
+    );
+  }, [activeTraceLink, prd]);
+
+  const linkedGoals = React.useMemo(() => {
+    if (!activeTraceLink || !prd) return [];
+    return activeTraceLink.goalIndexes
+      .filter((idx) => typeof idx === 'number' && idx >= 0 && idx < prd.goals.length)
+      .map((idx) => ({ index: idx, text: prd.goals[idx] }));
+  }, [activeTraceLink, prd]);
+
+  const linkedMetrics = React.useMemo(() => {
+    if (!activeTraceLink || !prd) return [];
+    return activeTraceLink.successMetricIndexes
+      .filter((idx) => typeof idx === 'number' && idx >= 0 && idx < prd.successMetrics.length)
+      .map((idx) => ({ index: idx, data: prd.successMetrics[idx] }));
+  }, [activeTraceLink, prd]);
 
   const handleGenerate = async () => {
     if (isGenerating) return; // Prevent duplicate requests
@@ -174,6 +212,32 @@ ${prd.risks
 - **Mitigation**: ${r.mitigation}`
   )
   .join('\n\n')}
+
+## 10. Traceability Matrix
+- **Synchronization Status**: ${syncStatus}
+- **Source Analysis Timestamp**: ${prd.sourceAnalysisGeneratedAt || 'Unknown / Legacy'}
+${
+  prd.traceability?.links && prd.traceability.links.length > 0
+    ? prd.traceability.links
+        .map((link) => {
+          const story = prd.userStories.find((s) => s.id === link.userStoryId);
+          const reqs =
+            link.functionalRequirementIds.length > 0
+              ? link.functionalRequirementIds.join(', ')
+              : 'No direct requirement';
+          const goals =
+            link.goalIndexes.length > 0
+              ? link.goalIndexes.map((idx) => `Goal #${idx + 1}`).join(', ')
+              : 'No direct goal';
+          const metrics =
+            link.successMetricIndexes.length > 0
+              ? link.successMetricIndexes.map((idx) => prd.successMetrics[idx]?.metric || `Metric #${idx + 1}`).join(', ')
+              : 'No direct metric';
+          return `- **${link.userStoryId}** (${story?.title || 'Story'}): Requirements: [${reqs}] → Goals: [${goals}] → Metrics: [${metrics}]`;
+        })
+        .join('\n')
+    : 'No item-level traceability recorded (Legacy PRD).'
+}
 `;
 
     navigator.clipboard.writeText(markdown);
@@ -247,10 +311,22 @@ ${prd.risks
                 Stage 03 • Phase 3 Active
               </span>
               {prd && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900/50">
-                  <CheckCircle2 className="size-3" />
-                  PRD Generated
-                </span>
+                syncStatus === 'CURRENT' ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900/50">
+                    <CheckCircle2 className="size-3" />
+                    PRD Synchronized (Current)
+                  </span>
+                ) : syncStatus === 'STALE' ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800 border border-amber-300 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-900/50">
+                    <AlertTriangle className="size-3 text-amber-600" />
+                    PRD Outdated (Stale)
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2.5 py-0.5 text-[11px] font-semibold text-zinc-700 border border-zinc-300 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700">
+                    <HelpCircle className="size-3 text-zinc-500" />
+                    Legacy PRD (Unverified)
+                  </span>
+                )
               )}
             </div>
             <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
@@ -337,6 +413,78 @@ ${prd.risks
         )}
       </Card>
 
+      {/* Stale PRD Alert Banner */}
+      {prd && syncStatus === 'STALE' && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50/90 p-4 dark:border-amber-900/60 dark:bg-amber-950/30">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-lg bg-amber-200/80 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 shrink-0 mt-0.5">
+                <AlertTriangle className="size-4.5" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <h4 className="text-sm font-bold text-amber-950 dark:text-amber-100">
+                    PRD needs regeneration
+                  </h4>
+                  <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 dark:bg-amber-900 dark:text-amber-200 font-bold">
+                    STALE / OUTDATED
+                  </span>
+                </div>
+                <p className="text-xs text-amber-900/90 dark:text-amber-200/90 leading-relaxed">
+                  The Project Analysis has changed since this PRD was generated. Regenerate PRD to synchronize it with the latest analysis. The historical PRD is preserved below for reference.
+                </p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              isLoading={isGenerating}
+              disabled={isGenerating}
+              onClick={handleGenerate}
+              className="bg-amber-600 hover:bg-amber-700 text-white shrink-0 self-start sm:self-auto shadow-xs font-semibold"
+              leftIcon={<RefreshCw className={`size-3.5 ${isGenerating ? 'animate-spin' : ''}`} />}
+            >
+              Regenerate PRD
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Legacy PRD Alert Banner */}
+      {prd && syncStatus === 'LEGACY' && (
+        <div className="rounded-xl border border-zinc-300 bg-zinc-50/90 p-4 dark:border-zinc-800 dark:bg-zinc-900/40">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-lg bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 shrink-0 mt-0.5">
+                <HelpCircle className="size-4.5" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <h4 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                    Legacy PRD Version
+                  </h4>
+                  <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded-full bg-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-300 font-bold">
+                    UNKNOWN / LEGACY
+                  </span>
+                </div>
+                <p className="text-xs text-zinc-600 dark:text-zinc-400 leading-relaxed">
+                  This PRD was created before source analysis version tracking was enabled. Regenerate PRD to synchronize and establish verified item-level traceability.
+                </p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              isLoading={isGenerating}
+              disabled={isGenerating}
+              onClick={handleGenerate}
+              className="bg-purple-600 hover:bg-purple-700 text-white shrink-0 self-start sm:self-auto font-semibold"
+              leftIcon={<RefreshCw className={`size-3.5 ${isGenerating ? 'animate-spin' : ''}`} />}
+            >
+              Synchronize PRD
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* State 2: No PRD generated yet */}
       {!prd && !isGenerating && (
         <Card className="p-8 text-center space-y-4 border-dashed">
@@ -369,27 +517,45 @@ ${prd.risks
       {prd && (
         <div className="space-y-8">
           {/* ========================================================= */}
-          {/* PRD WORKFLOW VISUALIZATION (REQUIRED SECTION)             */}
+          {/* PRD WORKFLOW VISUALIZATION (TWO-LAYER SYSTEM)              */}
           {/* ========================================================= */}
-          <Card className="p-6 overflow-hidden">
-            <div className="space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3 border-b border-zinc-100 dark:border-zinc-800">
-                <div className="flex items-center gap-2">
-                  <div className="p-1.5 rounded-md bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400">
-                    <Workflow className="size-4" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-                      PRD Workflow Traceability
-                    </h4>
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                      Visual progression mapping user personas and core needs into functional requirements and target outcomes.
-                    </p>
-                  </div>
+          <Card className="p-6 overflow-hidden space-y-6">
+            {/* Workflow Card Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3 border-b border-zinc-100 dark:border-zinc-800">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-md bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400">
+                  <Workflow className="size-4" />
                 </div>
+                <div>
+                  <h4 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                    PRD Workflow & Traceability
+                  </h4>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    Two-layer system: high-level lifecycle progression overview and verified item-level traceability matrix.
+                  </p>
+                </div>
+              </div>
 
-                <span className="text-[11px] font-mono text-zinc-400 self-start sm:self-auto">
-                  Live PRD Data Mapping
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+                  Layer 1: Pipeline
+                </span>
+                <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300">
+                  Layer 2: Item Links
+                </span>
+              </div>
+            </div>
+
+            {/* ========================================================= */}
+            {/* LAYER 1: HIGH-LEVEL LIFECYCLE PROGRESSION (OVERVIEW)      */}
+            {/* ========================================================= */}
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
+                  Layer 1 • Lifecycle Progression Overview
+                </span>
+                <span className="text-[11px] font-mono text-zinc-400">
+                  USERS → NEEDS → STORIES → REQS → OUTCOMES
                 </span>
               </div>
 
@@ -550,6 +716,253 @@ ${prd.risks
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* ========================================================= */}
+            {/* LAYER 2: INTERACTIVE ITEM-LEVEL TRACEABILITY              */}
+            {/* ========================================================= */}
+            <div className="border-t border-zinc-100 dark:border-zinc-800 pt-5 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-300">
+                      Layer 2 • Traceability
+                    </span>
+                    <h5 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
+                      <Link2 className="size-3.5 text-purple-600" />
+                      Verified Item-Level Traceability Matrix
+                    </h5>
+                  </div>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    Select a User Story to inspect verified direct connections through functional requirements, strategic goals, and success metrics. No fabricated relationships are displayed.
+                  </p>
+                </div>
+                <span className="text-[11px] font-mono text-zinc-400 self-start sm:self-auto">
+                  {prd.traceability?.links?.length ? `${prd.traceability.links.length} Verified Links` : 'Legacy Format'}
+                </span>
+              </div>
+
+              {/* Check if traceability exists */}
+              {!prd.traceability?.links || prd.traceability.links.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-zinc-200 p-6 text-center space-y-2 dark:border-zinc-800">
+                  <p className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                    Item-Level Traceability Unavailable for Legacy PRD
+                  </p>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-lg mx-auto">
+                    This PRD was created prior to Phase 3.1 item-level traceability mapping. Click <strong>Regenerate PRD</strong> above to build verified end-to-end chains.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Story selector buttons */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                        Select User Story to Trace:
+                      </span>
+                      <span className="text-[11px] text-zinc-500">
+                        Inspecting: <strong className="font-mono text-purple-600 dark:text-purple-400">{activeStory?.id}</strong>
+                      </span>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      {prd.userStories.map((story) => {
+                        const isSelected = activeStory?.id === story.id;
+                        const hasLink = prd.traceability?.links?.some((l) => l.userStoryId === story.id);
+                        return (
+                          <button
+                            key={story.id}
+                            type="button"
+                            onClick={() => setSelectedStoryId(story.id)}
+                            className={`text-left px-3 py-1.5 rounded-lg border text-xs transition-all flex items-center gap-2 cursor-pointer ${
+                              isSelected
+                                ? 'border-purple-600 bg-purple-50 text-purple-950 font-semibold shadow-xs ring-2 ring-purple-500/20 dark:border-purple-500 dark:bg-purple-950/40 dark:text-purple-200'
+                                : 'border-zinc-200 bg-white text-zinc-700 hover:border-purple-300 hover:bg-purple-50/30 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-purple-900/50'
+                            }`}
+                          >
+                            <span
+                              className={`font-mono text-[11px] px-1.5 py-0.5 rounded ${
+                                isSelected
+                                  ? 'bg-purple-200 text-purple-900 dark:bg-purple-900 dark:text-purple-200'
+                                  : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400'
+                              }`}
+                            >
+                              {story.id}
+                            </span>
+                            <span className="truncate max-w-[140px] sm:max-w-[200px]">{story.title}</span>
+                            {!hasLink && (
+                              <span className="text-[9px] text-zinc-400 italic">(unlinked)</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Active Story Trace Tree */}
+                  {activeStory && (
+                    <div className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 space-y-4 dark:border-zinc-800 dark:bg-zinc-900/30">
+                      {/* Step 1: User Story (The Anchor) */}
+                      <div className="rounded-lg border border-purple-200 bg-white p-4 shadow-xs dark:border-purple-900/40 dark:bg-zinc-900 space-y-2">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300">
+                              Trace Anchor
+                            </span>
+                            <span className="font-mono text-xs font-bold text-purple-900 dark:text-purple-300">
+                              {activeStory.id}
+                            </span>
+                          </div>
+                          <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">
+                            {activeStory.title}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 pt-2 border-t border-purple-50 dark:border-zinc-800 text-xs text-zinc-700 dark:text-zinc-300">
+                          <div className="p-2 rounded bg-purple-50/50 dark:bg-purple-950/20">
+                            <span className="text-[10px] uppercase font-bold text-purple-700 dark:text-purple-400 block mb-0.5">
+                              As a
+                            </span>
+                            <p className="leading-snug">{activeStory.asA}</p>
+                          </div>
+                          <div className="p-2 rounded bg-purple-50/50 dark:bg-purple-950/20">
+                            <span className="text-[10px] uppercase font-bold text-purple-700 dark:text-purple-400 block mb-0.5">
+                              I want to
+                            </span>
+                            <p className="leading-snug">{activeStory.iWant}</p>
+                          </div>
+                          <div className="p-2 rounded bg-purple-50/50 dark:bg-purple-950/20">
+                            <span className="text-[10px] uppercase font-bold text-purple-700 dark:text-purple-400 block mb-0.5">
+                              So that
+                            </span>
+                            <p className="leading-snug">{activeStory.soThat}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Connector 1: Down to Functional Requirements */}
+                      <div className="flex items-center justify-center gap-2 text-zinc-400 dark:text-zinc-500">
+                        <div className="h-px w-12 bg-zinc-200 dark:bg-zinc-800" />
+                        <div className="flex items-center gap-1.5 text-[11px] font-mono font-medium text-purple-600 dark:text-purple-400">
+                          <ArrowDown className="size-3.5" />
+                          <span>Implemented By Functional Requirements</span>
+                        </div>
+                        <div className="h-px w-12 bg-zinc-200 dark:bg-zinc-800" />
+                      </div>
+
+                      {/* Step 2: Functional Requirements */}
+                      <div>
+                        {linkedFRs.length === 0 ? (
+                          <div className="rounded-lg border border-dashed border-zinc-200 bg-white p-3 text-center text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 flex items-center justify-center gap-2">
+                            <MinusCircle className="size-4 text-zinc-400" />
+                            <span>No direct relationship identified. (No functional requirements mapped to this user story).</span>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            {linkedFRs.map((fr) => (
+                              <div
+                                key={fr.id}
+                                className="rounded-lg border border-emerald-200 bg-white p-3 shadow-2xs dark:border-emerald-900/40 dark:bg-zinc-900 space-y-1.5"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span className="font-mono text-xs font-bold text-emerald-700 dark:text-emerald-400">
+                                    {fr.id}
+                                  </span>
+                                  {getPriorityBadge(fr.priority)}
+                                </div>
+                                <h6 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 leading-snug">
+                                  {fr.title}
+                                </h6>
+                                <p className="text-xs text-zinc-600 dark:text-zinc-400 line-clamp-2 leading-relaxed">
+                                  {fr.description}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Connector 2: Down to Strategic Goals */}
+                      <div className="flex items-center justify-center gap-2 text-zinc-400 dark:text-zinc-500">
+                        <div className="h-px w-12 bg-zinc-200 dark:bg-zinc-800" />
+                        <div className="flex items-center gap-1.5 text-[11px] font-mono font-medium text-indigo-600 dark:text-indigo-400">
+                          <ArrowDown className="size-3.5" />
+                          <span>Advances Strategic Goals</span>
+                        </div>
+                        <div className="h-px w-12 bg-zinc-200 dark:bg-zinc-800" />
+                      </div>
+
+                      {/* Step 3: Strategic Goals */}
+                      <div>
+                        {linkedGoals.length === 0 ? (
+                          <div className="rounded-lg border border-dashed border-zinc-200 bg-white p-3 text-center text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 flex items-center justify-center gap-2">
+                            <MinusCircle className="size-4 text-zinc-400" />
+                            <span>No direct relationship identified. (No strategic goal specifically linked).</span>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {linkedGoals.map((g) => (
+                              <div
+                                key={g.index}
+                                className="rounded-lg border border-indigo-200 bg-white p-3 text-xs text-zinc-800 dark:border-indigo-900/40 dark:bg-zinc-900 dark:text-zinc-200 shadow-2xs flex items-start gap-2.5"
+                              >
+                                <span className="font-mono text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300 shrink-0 mt-0.5">
+                                  Goal #{g.index + 1}
+                                </span>
+                                <p className="leading-snug">{g.text}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Connector 3: Down to Success Metrics */}
+                      <div className="flex items-center justify-center gap-2 text-zinc-400 dark:text-zinc-500">
+                        <div className="h-px w-12 bg-zinc-200 dark:bg-zinc-800" />
+                        <div className="flex items-center gap-1.5 text-[11px] font-mono font-medium text-amber-600 dark:text-amber-400">
+                          <ArrowDown className="size-3.5" />
+                          <span>Validated By Success Metrics</span>
+                        </div>
+                        <div className="h-px w-12 bg-zinc-200 dark:bg-zinc-800" />
+                      </div>
+
+                      {/* Step 4: Success Metrics */}
+                      <div>
+                        {linkedMetrics.length === 0 ? (
+                          <div className="rounded-lg border border-dashed border-zinc-200 bg-white p-3 text-center text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 flex items-center justify-center gap-2">
+                            <MinusCircle className="size-4 text-zinc-400" />
+                            <span>No direct relationship identified. (No success metric specifically linked).</span>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            {linkedMetrics.map((m) => (
+                              <div
+                                key={m.index}
+                                className="rounded-lg border border-amber-200 bg-white p-3 shadow-2xs dark:border-amber-900/40 dark:bg-zinc-900 space-y-1.5"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[10px] font-mono font-bold uppercase px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                                    Metric #{m.index + 1}
+                                  </span>
+                                  <span className="text-xs font-bold text-amber-900 dark:text-amber-300">
+                                    Target: {m.data.target}
+                                  </span>
+                                </div>
+                                <h6 className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 leading-snug">
+                                  {m.data.metric}
+                                </h6>
+                                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-tight">
+                                  Measurement: {m.data.measurement}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </Card>
 
