@@ -1,7 +1,8 @@
 'use client';
 
-import { Project, ProjectStatus, ProjectAnalysis, CreateProjectInput, UpdateProjectInput } from '@/types/project';
+import { Project, ProjectStatus, ProjectAnalysis, ProjectPRD, CreateProjectInput, UpdateProjectInput } from '@/types/project';
 import { validateProjectAnalysis } from '@/lib/analysis-validator';
+import { validateProjectPRD } from '@/lib/prd-validator';
 
 const STORAGE_KEY = 'ai_product_planner_projects_v1';
 const EVENT_NAME = 'ai_product_planner_projects_updated';
@@ -83,6 +84,14 @@ function sanitizeProject(item: unknown): Project | null {
     }
   }
 
+  let prd: ProjectPRD | undefined = undefined;
+  if (raw.prd) {
+    const valPRD = validateProjectPRD(raw.prd);
+    if (valPRD.success) {
+      prd = valPRD.data;
+    }
+  }
+
   return {
     id: raw.id,
     name: raw.name,
@@ -92,6 +101,7 @@ function sanitizeProject(item: unknown): Project | null {
     tags,
     status,
     analysis,
+    prd,
     createdAt,
     updatedAt,
   };
@@ -181,6 +191,14 @@ export const projectStorage = {
       }
     }
 
+    let newPRD = existing.prd;
+    if (input.prd !== undefined) {
+      const valPRD = validateProjectPRD(input.prd);
+      if (valPRD.success) {
+        newPRD = valPRD.data;
+      }
+    }
+
     const updatedProject: Project = {
       ...existing,
       name: input.name !== undefined ? input.name.trim() : existing.name,
@@ -190,6 +208,7 @@ export const projectStorage = {
       tags: input.tags !== undefined ? input.tags.map((t) => t.trim()).filter(Boolean) : existing.tags,
       status: input.status !== undefined ? input.status : existing.status,
       analysis: newAnalysis,
+      prd: newPRD,
       updatedAt: new Date().toISOString(),
     };
 
@@ -230,6 +249,36 @@ export const projectStorage = {
         notifySubscribers();
       } catch (err) {
         console.error('Failed to save project analysis to storage:', err);
+      }
+    }
+    return updatedProject;
+  },
+
+  async savePRD(id: string, prd: ProjectPRD): Promise<Project | null> {
+    const valResult = validateProjectPRD(prd);
+    if (!valResult.success) {
+      console.error('Invalid PRD data rejected by storage:', valResult.error);
+      return null;
+    }
+
+    const list = await this.getAll();
+    const index = list.findIndex((p) => p.id === id);
+    if (index === -1) return null;
+
+    const existing = list[index];
+    const updatedProject: Project = {
+      ...existing,
+      prd: valResult.data,
+      updatedAt: new Date().toISOString(),
+    };
+
+    list[index] = updatedProject;
+    if (isBrowser()) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+        notifySubscribers();
+      } catch (err) {
+        console.error('Failed to save project PRD to storage:', err);
       }
     }
     return updatedProject;

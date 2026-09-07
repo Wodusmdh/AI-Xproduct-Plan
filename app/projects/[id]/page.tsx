@@ -12,10 +12,12 @@ import { Input } from '@/components/ui/Input';
 import { Textarea } from '@/components/ui/Textarea';
 import { FutureFeatureModal } from '@/components/projects/FutureFeatureModal';
 import { ProjectAnalysisPanel } from '@/components/projects/ProjectAnalysisPanel';
+import { ProjectPRDPanel } from '@/components/projects/ProjectPRDPanel';
 import { projectStorage } from '@/lib/storage';
-import { Project, ProjectStatus, ProjectAnalysis, PLANNER_STAGES, PlannerStage } from '@/types/project';
+import { Project, ProjectStatus, ProjectAnalysis, ProjectPRD, PLANNER_STAGES, PlannerStage } from '@/types/project';
 import {
   ArrowLeft,
+  ArrowRight,
   Calendar,
   Sparkles,
   Edit3,
@@ -198,6 +200,16 @@ ${project.analysis.scope.inScope.map((s) => `- ${s}`).join('\n')}
 ${project.analysis.risks.map((r) => `- [${r.severity.toUpperCase()}] ${r.title}: ${r.mitigation}`).join('\n')}
 `;
     }
+    if (project.prd) {
+      formatted += `
+## Product Requirements Document (PRD - Generated ${new Date(project.prd.generatedAt).toLocaleDateString()})
+**Product Name:** ${project.prd.overview.productName}
+**Summary:** ${project.prd.overview.summary}
+
+### Functional Requirements
+${project.prd.functionalRequirements.map((fr) => `- [${fr.priority.toUpperCase()}] ${fr.id}: ${fr.title} - ${fr.description}`).join('\n')}
+`;
+    }
     navigator.clipboard.writeText(formatted);
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2000);
@@ -212,6 +224,18 @@ ${project.analysis.risks.map((r) => `- [${r.severity.toUpperCase()}] ${r.title}:
       }
     } catch (err) {
       console.error('Failed to save updated analysis:', err);
+    }
+  };
+
+  const handlePRDUpdated = async (newPRD: ProjectPRD) => {
+    if (!project) return;
+    try {
+      const updated = await projectStorage.savePRD(project.id, newPRD);
+      if (updated) {
+        setProject(updated);
+      }
+    } catch (err) {
+      console.error('Failed to save updated PRD:', err);
     }
   };
 
@@ -340,7 +364,7 @@ ${project.analysis.risks.map((r) => `- [${r.severity.toUpperCase()}] ${r.title}:
             <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
               Specification & Planning Pipeline
             </h2>
-            <span className="text-xs text-zinc-400">Phase 2 Active • Stage 1 & 2 Available</span>
+            <span className="text-xs text-zinc-400">Phase 3 Active • Stages 1, 2 & 3 Available</span>
           </div>
 
           {/* Horizontal stage strip */}
@@ -376,10 +400,18 @@ ${project.analysis.risks.map((r) => `- [${r.severity.toUpperCase()}] ${r.title}:
                       ) : (
                         <span className="size-1.5 rounded-full bg-purple-500" title="Ready to Analyze" />
                       )
+                    ) : stage.id === 'prd' ? (
+                      project.prd ? (
+                        <span className="size-1.5 rounded-full bg-emerald-500" title="PRD Generated" />
+                      ) : project.analysis ? (
+                        <span className="size-1.5 rounded-full bg-purple-500" title="Ready to Generate PRD" />
+                      ) : (
+                        <span className="size-1.5 rounded-full bg-zinc-300 dark:bg-zinc-600" title="Needs Analysis First" />
+                      )
                     ) : stage.isImplemented ? (
                       <span className="size-1.5 rounded-full bg-emerald-500" />
                     ) : (
-                      <span className="text-[9px] text-zinc-400 uppercase">P3</span>
+                      <span className="text-[9px] text-zinc-400 uppercase">P4</span>
                     )}
                   </div>
 
@@ -396,7 +428,17 @@ ${project.analysis.risks.map((r) => `- [${r.severity.toUpperCase()}] ${r.title}:
 
         {/* Active Stage Content Area */}
         {activeStageId === 'analysis' ? (
-          <ProjectAnalysisPanel project={project} onAnalysisUpdated={handleAnalysisUpdated} />
+          <ProjectAnalysisPanel
+            project={project}
+            onAnalysisUpdated={handleAnalysisUpdated}
+            onNavigateToPRD={() => setActiveStageId('prd')}
+          />
+        ) : activeStageId === 'prd' ? (
+          <ProjectPRDPanel
+            project={project}
+            onPRDUpdated={handlePRDUpdated}
+            onNavigateToAnalysis={() => setActiveStageId('analysis')}
+          />
         ) : (
           <Card className="p-6">
             <div className="space-y-6">
@@ -460,14 +502,27 @@ ${project.analysis.risks.map((r) => `- [${r.severity.toUpperCase()}] ${r.title}:
                   </p>
                 </div>
 
-                <Button
-                  size="sm"
-                  className="bg-purple-600 hover:bg-purple-700 text-white shrink-0"
-                  onClick={() => setActiveStageId('analysis')}
-                  leftIcon={<Sparkles className="size-3.5" />}
-                >
-                  {project.analysis ? 'View AI Analysis' : 'Run Stage 02 Analysis'}
-                </Button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    size="sm"
+                    variant={project.prd ? 'outline' : 'primary'}
+                    className={project.prd ? '' : 'bg-purple-600 hover:bg-purple-700 text-white'}
+                    onClick={() => setActiveStageId('analysis')}
+                    leftIcon={<Sparkles className="size-3.5" />}
+                  >
+                    {project.analysis ? 'View AI Analysis' : 'Run Stage 02 Analysis'}
+                  </Button>
+                  {project.analysis && (
+                    <Button
+                      size="sm"
+                      className="bg-purple-600 hover:bg-purple-700 text-white"
+                      onClick={() => setActiveStageId('prd')}
+                      rightIcon={<ArrowRight className="size-3.5" />}
+                    >
+                      {project.prd ? 'View PRD' : 'Proceed to PRD'}
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           </Card>

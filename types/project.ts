@@ -60,6 +60,65 @@ export interface ProjectAnalysis {
   generatedAt: string;
 }
 
+export interface ProjectPRD {
+  overview: {
+    productName: string;
+    summary: string;
+    problemStatement: string;
+    proposedSolution: string;
+  };
+
+  goals: string[];
+
+  nonGoals: string[];
+
+  targetUsers: {
+    primary: string[];
+    secondary: string[];
+  };
+
+  userNeeds: string[];
+
+  userStories: {
+    id: string;
+    title: string;
+    asA: string;
+    iWant: string;
+    soThat: string;
+  }[];
+
+  functionalRequirements: {
+    id: string;
+    title: string;
+    description: string;
+    priority: 'low' | 'medium' | 'high';
+  }[];
+
+  nonFunctionalRequirements: {
+    id: string;
+    category: string;
+    requirement: string;
+  }[];
+
+  constraints: string[];
+
+  assumptions: string[];
+
+  successMetrics: {
+    metric: string;
+    target: string;
+    measurement: string;
+  }[];
+
+  risks: {
+    title: string;
+    description: string;
+    mitigation: string;
+  }[];
+
+  generatedAt: string;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -69,6 +128,7 @@ export interface Project {
   tags?: string[];
   status: ProjectStatus;
   analysis?: ProjectAnalysis;
+  prd?: ProjectPRD;
   createdAt: string;
   updatedAt: string;
 }
@@ -90,6 +150,7 @@ export interface UpdateProjectInput {
   tags?: string[];
   status?: ProjectStatus;
   analysis?: ProjectAnalysis;
+  prd?: ProjectPRD;
 }
 
 export interface PlannerStage {
@@ -123,15 +184,15 @@ export const PLANNER_STAGES: PlannerStage[] = [
     number: 3,
     title: 'Product Requirements Document (PRD)',
     shortDesc: 'Comprehensive functional requirements, user journeys, and acceptance criteria.',
-    phase: 'Phase 3 (Planned)',
-    isImplemented: false,
+    phase: 'Phase 3 (Active)',
+    isImplemented: true,
   },
   {
     id: 'features',
     number: 4,
     title: 'Feature Specifications',
     shortDesc: 'Detailed UI/UX breakdown and edge-case definitions per feature.',
-    phase: 'Phase 3 (Planned)',
+    phase: 'Phase 4 (Planned)',
     isImplemented: false,
   },
   {

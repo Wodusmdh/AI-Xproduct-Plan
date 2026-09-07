@@ -1,6 +1,6 @@
 {
   "name": "AI Product Planner",
-  "description": "Transform raw software and product ideas into structured development plans and specs for AI coding tools.",
+  "description": "Transform raw software and product ideas into structured project analyses, engineering PRDs, and development specifications.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

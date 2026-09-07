@@ -26,9 +26,10 @@ import {
 export interface ProjectAnalysisPanelProps {
   project: Project;
   onAnalysisUpdated: (updatedAnalysis: ProjectAnalysis) => void;
+  onNavigateToPRD?: () => void;
 }
 
-export function ProjectAnalysisPanel({ project, onAnalysisUpdated }: ProjectAnalysisPanelProps) {
+export function ProjectAnalysisPanel({ project, onAnalysisUpdated, onNavigateToPRD }: ProjectAnalysisPanelProps) {
   const [isAnalyzing, setIsAnalyzing] = React.useState(false);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const [copiedSection, setCopiedSection] = React.useState<string | null>(null);
@@ -690,6 +691,28 @@ ${analysis.scope.outOfScope.map((s) => `- ${s}`).join('\n')}
               ))}
             </div>
           </Card>
+
+          {/* Next Stage Pipeline Banner */}
+          {onNavigateToPRD && (
+            <div className="rounded-xl border border-purple-200 bg-purple-50/60 p-4 dark:border-purple-900/50 dark:bg-purple-950/20 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="space-y-0.5">
+                <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-purple-700 dark:text-purple-400">
+                  Next Step • Stage 03 PRD
+                </span>
+                <p className="text-xs text-zinc-700 dark:text-zinc-300">
+                  Transform this verified analysis into a Product Requirements Document with user stories, functional requirements, and outcome workflow.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                onClick={onNavigateToPRD}
+                className="bg-purple-600 hover:bg-purple-700 text-white shrink-0 self-start sm:self-auto"
+                rightIcon={<ArrowRight className="size-3.5" />}
+              >
+                Proceed to PRD
+              </Button>
+            </div>
+          )}
 
           {/* Generation Metadata Footer */}
           <div className="flex items-center justify-between text-xs text-zinc-400 pt-2 border-t border-zinc-100 dark:border-zinc-800">
