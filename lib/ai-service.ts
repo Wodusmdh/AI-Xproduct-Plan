@@ -224,50 +224,58 @@ Produce a comprehensive JSON object matching the provided schema, including:
 9. Potential candidate features (with priority low/medium/high and strategic rationale)
 10. Current ISO-8601 timestamp in generatedAt.`;
 
-  const candidateModels = ['gemini-3.5-flash', 'gemini-3.6-flash', 'gemini-3.8-flash'];
   let responseText: string | undefined;
-  let lastError: unknown;
+  const maxAttempts = 2;
 
-  for (const model of candidateModels) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       const response = await ai.models.generateContent({
-        model,
+        model: 'gemini-3.8-flash',
         contents: userPrompt,
         config: {
           systemInstruction,
           responseMimeType: 'application/json',
           responseSchema: analysisResponseSchema,
-          temperature: 0.3, // Lower temperature for structured, consistent analysis
         },
       });
 
       responseText = response.text;
       if (responseText && responseText.trim()) {
-        break; // Successfully got response
+        break;
       }
     } catch (err: unknown) {
-      lastError = err;
       const errMessage = err instanceof Error ? err.message : String(err);
-      console.warn(`Model ${model} failed, attempting next candidate if available:`, errMessage);
+      console.error(`Gemini API call (attempt ${attempt}/${maxAttempts}) failed:`, errMessage);
 
-      // If error is invalid API key or permission, don't keep failing
       if (errMessage.includes('API_KEY_INVALID') || errMessage.includes('403') || errMessage.includes('Forbidden')) {
         throw new Error('Invalid Gemini API Key. Please verify your GEMINI_API_KEY in the environment settings.');
       }
+
+      const isTransient =
+        errMessage.includes('503') ||
+        errMessage.includes('UNAVAILABLE') ||
+        errMessage.includes('high demand') ||
+        errMessage.includes('RESOURCE_EXHAUSTED') ||
+        errMessage.includes('429');
+
+      if (attempt < maxAttempts && isTransient) {
+        // Wait 1.5s before retrying single model gemini-3.8-flash
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        continue;
+      }
+
+      if (errMessage.includes('RESOURCE_EXHAUSTED') || errMessage.includes('429')) {
+        throw new Error('Gemini API rate limit exceeded. Please wait a moment before trying again.');
+      }
+      if (errMessage.includes('503') || errMessage.includes('UNAVAILABLE') || errMessage.includes('high demand')) {
+        throw new Error('Gemini AI service is currently experiencing high demand. Please try again in a moment.');
+      }
+      throw new Error('Gemini AI service encountered an error while analyzing the project. Please try again.');
     }
   }
 
   if (!responseText || !responseText.trim()) {
-    const errMessage = lastError instanceof Error ? lastError.message : String(lastError);
-    console.error('All Gemini model candidates failed:', errMessage);
-
-    if (errMessage.includes('RESOURCE_EXHAUSTED') || errMessage.includes('429')) {
-      throw new Error('Gemini API rate limit exceeded. Please wait a moment before trying again.');
-    }
-    if (errMessage.includes('503') || errMessage.includes('UNAVAILABLE') || errMessage.includes('high demand')) {
-      throw new Error('Gemini AI service is currently experiencing high demand. Please try again in a moment.');
-    }
-    throw new Error('Gemini AI service encountered an error while analyzing the project. Please try again.');
+    throw new Error('Gemini returned an empty response.');
   }
 
   let parsed: unknown;
